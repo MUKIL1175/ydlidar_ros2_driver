@@ -1,208 +1,218 @@
-![YDLIDAR](images/YDLidar.jpg  "YDLIDAR")
-# YDLIDAR ROS2 Driver
+![YDLIDAR](images/YDLidar.jpg "YDLIDAR")
+# YDLIDAR ROS 2 Driver (ROS 2 Jazzy & Ubuntu 24.04 Compatible)
 
-ydlidar_ros2_driver is a new ros package, which is designed to gradually become the standard driver package for ydlidar devices in the ros2 environment.
+`ydlidar_ros2_driver` is the ROS 2 driver package for YDLIDAR devices. This version is fully adapted and tested for **ROS 2 Jazzy Jalisco on Ubuntu 24.04 LTS (Noble Numbat)**, while retaining full compatibility with **ROS 2 Humble**.
 
-## How to [install ROS2](https://index.ros.org/doc/ros2/Installation)
-[ubuntu](https://index.ros.org/doc/ros2/Installation/Dashing/Linux-Install-Debians/)
+---
 
-[windows](https://index.ros.org/doc/ros2/Installation/Dashing/Windows-Install-Binary/)
+## What's New in this ROS 2 Jazzy & Ubuntu 24.04 Edition
 
-## How to Create a ROS2 workspace
-[Create a workspace](https://index.ros.org/doc/ros2/Tutorials/Colcon-Tutorial/#create-a-workspace)
+1. **C++17 & GCC 14 Compliance**:
+   - `CMakeLists.txt` upgraded to C++17 (`CMAKE_CXX_STANDARD 17` required) and CMake 3.16+ minimum version.
+   - Clean compilation under GCC 14 on Ubuntu 24.04 without deprecated warnings or missing standard headers (`<cmath>`, `<limits>`, `<rcutils/time.h>`).
 
+2. **ROS 2 Jazzy Node & Launch Refactoring**:
+   - Replaced invalid `LifecycleNode` declarations with standard `launch_ros.actions.Node` for clean startup in Jazzy.
+   - Updated `tf2_ros static_transform_publisher` arguments to modern flag arguments (`--x`, `--y`, `--z`, `--qx`, `--qy`, `--qz`, `--qw`, `--frame-id`, `--child-frame-id`).
+   - Replaced deprecated `launch/ydlidar.py` script with modern ROS 2 launch format.
+   - Added dedicated launch files for **YDLidar Tmini / Tmini Plus**:
+     - `tmini_plus_launch.py`: Starts driver using `params/Tmini.yaml`.
+     - `tmini_plus_view.py`: Starts driver and opens RViz2 with pre-configured Best Effort QoS.
 
-## Build & Install YDLidar SDK
+3. **RViz2 Best Effort QoS Match**:
+   - Configured `config/ydlidar.rviz` to `Reliability Policy: Best Effort` so laser scans are immediately visible in RViz2 without QoS mismatch errors.
 
-ydlidar_ros2_driver depends on YDLidar-SDK library. If you have never installed YDLidar-SDK library or it is out of date, you must first install YDLidar-SDK library. If you have installed the latest version of YDLidar-SDK, skip this step and go to the next step.
+4. **Parameter System & Nav2 Optimization**:
+   - Parameter declaration updated to avoid `InvalidParameterTypeException` with floating-point YAML parameters.
+   - Supported `invalid_range_is_inf`: correctly converts invalid/out-of-range scan readings to infinity (`inf`), as expected by Nav2.
+   - Resilient zero-timestamp handling: gracefully falls back to `node->get_clock()->now()` if hardware timestamp is unset.
 
-1. Download or clone the [YDLIDAR/YDLidar-SDK](https://github.com/YDLIDAR/YDLidar-SDK) repository on GitHub.
-2. Compile and install the YDLidar-SDK under the ***build*** directory following `README.md` of YDLIDAR/YDLidar-SDK.
+5. **Ubuntu 24.04 udev Support**:
+   - `startup/initenv.sh` updated to use `udevadm control --reload-rules && udevadm trigger` for modern systemd.
 
-## Build ydlidar_ros2_driver
+---
 
-1. Clone ydlidar_ros2_driver master branch from github for old version: 
+## 1. Prerequisites (Ubuntu 24.04 & ROS 2 Jazzy)
 
-   `git clone https://github.com/YDLIDAR/ydlidar_ros2_driver.git ydlidar_ros2_ws/src/ydlidar_ros2_driver`
-
-   Clone ydlidar_ros2_driver humble branch from github for humble,jazzy,etc: 
-
-   `git clone -b humble https://github.com/YDLIDAR/ydlidar_ros2_driver.git ydlidar_ros2_ws/src/ydlidar_ros2_driver`
-
-2. Build ydlidar_ros2_driver package :
-
-   ```
-   cd ydlidar_ros2_ws
-   colcon build --symlink-install
-   ```
-   Note: install colcon [see](https://index.ros.org/doc/ros2/Tutorials/Colcon-Tutorial/#install-colcon)
-
-   ![CMAKE Finished](images/finished.png  "CMAKE Finished")
-
-   <font color=Red size=4>>Note: If the following error occurs, Please install  [YDLIDAR/YDLidar-SDK](https://github.com/YDLIDAR/YDLidar-SDK) first.</font>
-
-   ![CMAKE ERROR](images/cmake_error.png  "CMAKE ERROR")
-
-3. Package environment setup :
-
-   `source ./install/setup.bash`
-
-    Note: Add permanent workspace environment variables.
-    It's convenientif the ROS2 environment variables are automatically added to your bash session every time a new shell is launched:
-    ```
-    echo "source ~/ydlidar_ros2_ws/install/setup.bash" >> ~/.bashrc
-    source ~/.bashrc
-    ```
-4. Confirmation
-    To confirm that your package path has been set, printenv the `grep -i ROS` variable.
-    ```
-    printenv | grep -i ROS
-    ```
-    You should see something similar to:
-        `OLDPWD=/home/tony/ydlidar_ros2_ws/install`
-
-5. Create serial port Alias [optional] 
-    ```
-    chmod 0777 src/ydlidar_ros2_driver/startup/*
-    sudo sh src/ydlidar_ros2_driver/startup/initenv.sh
-    ```
-    Note: After completing the previous operation, replug the LiDAR again.
-	
-## Configure LiDAR [Default parameter file](params/ydlidar.yaml)
-
+Make sure you have installed ROS 2 Jazzy desktop tools and build dependencies:
+```bash
+sudo apt update
+sudo apt install -y build-essential cmake git pkg-config python3-dev python3-colcon-common-extensions \
+    ros-jazzy-rclcpp ros-jazzy-sensor-msgs ros-jazzy-geometry-msgs ros-jazzy-visualization-msgs \
+    ros-jazzy-std-srvs ros-jazzy-tf2-ros ros-jazzy-rviz2
 ```
+
+---
+
+## 2. Build & Install YDLidar-SDK
+
+`ydlidar_ros2_driver` requires the `YDLidar-SDK` library installed on your system.
+
+```bash
+# 1. Clone YDLidar-SDK
+git clone https://github.com/YDLIDAR/YDLidar-SDK.git
+cd YDLidar-SDK
+
+# 2. Build and install
+mkdir -p build && cd build
+cmake ..
+make -j$(nproc)
+sudo make install
+```
+
+---
+
+## 3. Build ydlidar_ros2_driver
+
+In your ROS 2 workspace (e.g. `~/ros2_ws`):
+
+```bash
+# 1. Create workspace directory
+mkdir -p ~/ros2_ws/src
+cd ~/ros2_ws/src
+
+# 2. Copy or clone this package into src/
+# (If using this local repo: cp -r /path/to/ydlidar_ros2_driver ~/ros2_ws/src/)
+
+# 3. Build with colcon
+cd ~/ros2_ws
+colcon build --symlink-install
+
+# 4. Source setup
+source ~/ros2_ws/install/setup.bash
+```
+
+To automatically source this workspace in new terminals:
+```bash
+echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
+source ~/.bashrc
+```
+
+---
+
+## 4. Setup Serial Port Permissions / udev Alias
+
+Give your user permission to access the serial port (`dialout` group) or create `/dev/ydlidar` symlink:
+
+```bash
+# Add current user to dialout group
+sudo usermod -aG dialout $USER
+
+# (Optional) Install udev rule to automatically create /dev/ydlidar symlink
+cd ~/ros2_ws/src/ydlidar_ros2_driver
+sudo chmod +x startup/initenv.sh
+sudo ./startup/initenv.sh
+```
+*Note: After running this, re-plug the LiDAR USB cable into your computer.*
+
+---
+
+## 5. Configuration & Model Selection
+
+Configuration files are located in `params/`:
+
+| LiDAR Model | Parameter File |
+| :--- | :--- |
+| **Tmini Pro / Tmini Plus** | `params/Tmini.yaml` |
+| **Tmini Plus SH** | `params/Tmini-Plus-SH.yaml` |
+| **X2 / X2L** | `params/X2.yaml` |
+| **X3** | `params/X3.yaml` |
+| **X4** | `params/X4.yaml` |
+| **X4 Pro** | `params/X4-Pro.yaml` |
+| **G1** | `params/G1.yaml` |
+| **G2** | `params/G2.yaml` |
+| **G4** | `params/G4.yaml` |
+| **G6** | `params/G6.yaml` |
+| **GS2** | `params/GS2.yaml` |
+| **GS5** | `params/GS5.yaml` |
+| **TG15 / TG30 / TG50** | `params/TG.yaml` |
+| **TEA** | `params/TEA.yaml` |
+| **SDM15** | `params/sdm15.yaml` |
+| **Default / Generic** | `params/ydlidar.yaml` |
+
+### Tmini Plus Configuration (`params/Tmini.yaml`):
+```yaml
 ydlidar_ros2_driver_node:
   ros__parameters:
-    port: /dev/ttyUSB0
+    port: /dev/ttyUSB0      # or /dev/ydlidar if udev rule installed
     frame_id: laser_frame
     ignore_array: ""
     baudrate: 230400
-    lidar_type: 1
-    device_type: 0
+    lidar_type: 1           # 1 = TYPE_TRIANGLE
+    device_type: 0          # 0 = SERIAL
+    intensity: true
+    intensity_bit: 8
     isSingleChannel: false
-    intensity: false
-    intensity_bit: 0
-    sample_rate: 9
+    frequency: 10.0
+    sample_rate: 4
     abnormal_check_count: 4
     fixed_resolution: true
-    reversion: false
-    inverted: false
+    reversion: true
+    inverted: true
     auto_reconnect: true
     support_motor_dtr: false
     angle_max: 180.0
     angle_min: -180.0
-    range_max: 64.0
-    range_min: 0.01
-    frequency: 10.0
+    range_max: 12.0
+    range_min: 0.03
     invalid_range_is_inf: false
     debug: false
 ```
-**`Note: It needs to be modified according to LiDAR actual situation,Or specify parameter files in the [launch file].py file.`**
-| Lidar	Type			| Parameter File		|
-|-------------------------------|-------------------------------|
-|G4 Lidar			|G4.yaml			|
-|X2/X2L Lidar			|X2.yaml			|
-|X4 Lidar			|X4.yaml			|
-|X4 Pro Lidar			|X4-Pro.yaml			|
-|TG15/TG30/TG50 Lidar		|TG.yaml			|
-|Tmini Pro/Tmini Plus		|Tmini.yaml			|
-|Tmini Plus SH			|Tmini-Plus-SH.yaml		|
-|TEA Lidar			|TEA.yaml			|
-|GS2 Lidar			|GS2.yaml			|
-|GS5 Lidar			|GS5.yaml			|
-|SDM15 Lidar			|sdm15.yaml			|
 
-## Run ydlidar_ros2_driver
+---
 
-##### Run ydlidar_ros2_driver using launch file
+## 6. Running the Driver
 
-The command format is : 
+### For YDLidar Tmini Plus:
+* **Driver only:**
+  ```bash
+  ros2 launch ydlidar_ros2_driver tmini_plus_launch.py
+  ```
+* **Driver + RViz2 view:**
+  ```bash
+  ros2 launch ydlidar_ros2_driver tmini_plus_view.py
+  ```
 
- `ros2 launch ydlidar_ros2_driver [launch file].py`
+### For Any Other Model:
+* **Driver only (specify params_file):**
+  ```bash
+  ros2 launch ydlidar_ros2_driver ydlidar_launch.py params_file:=$(ros2 pkg prefix ydlidar_ros2_driver)/share/ydlidar_ros2_driver/params/X4.yaml
+  ```
+* **Driver + RViz2 view:**
+  ```bash
+  ros2 launch ydlidar_ros2_driver ydlidar_launch_view.py params_file:=$(ros2 pkg prefix ydlidar_ros2_driver)/share/ydlidar_ros2_driver/params/X4.yaml
+  ```
 
-1. Connect LiDAR uint(s).
-   ```
-   ros2 launch ydlidar_ros2_driver ydlidar_launch.py 
-   ```
-   or 
+### View Scan Data in Terminal:
+```bash
+# Using the driver client
+ros2 run ydlidar_ros2_driver ydlidar_ros2_driver_client
 
-   ```
-   launch $(ros2 pkg prefix ydlidar_ros2_driver)/share/ydlidar_ros2_driver/launch/ydlidar.py 
-   ```
-2. RVIZ 
-   ```
-   ros2 launch ydlidar_ros2_driver ydlidar_launch_view.py 
-   ```
-    ![View](images/view.png  "View")
+# Or using ros2 topic echo
+ros2 topic echo /scan
+```
 
-3. echo scan topic
-   ```
-   ros2 run ydlidar_ros2_driver ydlidar_ros2_driver_client or ros2 topic echo /scan
-   ```
+---
 
-#####  Launch file introduction
+## 7. ROS 2 Interfaces
 
-The driver offers users a wealth of options when using different launch file. The launch file directory    
+### Published Topics:
+* `/scan` (`sensor_msgs/msg/LaserScan`): 2D laser scan data (QoS: `SensorDataQoS`, Best Effort).
+* `/point_cloud` (`sensor_msgs/msg/PointCloud`): 2D point cloud representation.
 
-is `"ydlidar_ros2_ws/src/ydlidar_ros2_driver/launch"`. All launch files are listed as below : 
+### Services:
+* `/start_scan` (`std_srvs/srv/Empty`): Turn on laser rotation and scanning.
+* `/stop_scan` (`std_srvs/srv/Empty`): Turn off laser rotation and scanning.
 
-| launch file               | features                                                     |
-| ------------------------- | ------------------------------------------------------------ |
-| ydlidar.py         | Connect to defualt paramters<br/>Publish LaserScan message on `scan` topic |
-| ydlidar_launch.py         | Connect ydlidar.yaml Lidar specified by configuration parameters<br/>Publish LaserScan message on `scan` topic |
-| ydlidar_launch_view.py         | Connect ydlidar.yaml Lidar specified by configuration parameters and setup RVIZ<br/>Publish LaserScan message on `scan` topic |
+---
 
+## 8. Troubleshooting (ROS 2 Jazzy)
 
+* **RViz2 shows "Incompatible QoS":**
+  `ydlidar_ros2_driver` publishes using `rclcpp::SensorDataQoS()` (Best Effort reliability). The included `config/ydlidar.rviz` is already set to `Best Effort`. If creating a new RViz display, set `Topic -> Reliability Policy` to `Best Effort`.
 
-## Publish Topic
-| Topic                | Type                    | Description                                      |
-|----------------------|-------------------------|--------------------------------------------------|
-| `scan`               | sensor_msgs/LaserScan   | 2D laser scan of the 0-angle ring                |
+* **Device Permission Denied (`/dev/ttyUSB0`):**
+  Ensure your user is part of the `dialout` group: `sudo usermod -aG dialout $USER`, then log out and log back in.
 
-## Subscribe Service
-| Service                | Type                    | Description                                      |
-|----------------------|-------------------------|--------------------------------------------------|
-| `stop_scan`          | std_srvs::Empty   | turn off lidar                                         |
-| `start_scan`         | std_srvs::Empty   | turn on lidar                                          |
-
-
-
-## Configure ydlidar_ros_driver internal parameter
-
-The ydlidar_ros2_driver internal parameters are in the launch file, they are listed as below :
-
-| Parameter name | Data Type | detail                                                       |
-| -------------- | ------- | ------------------------------------------------------------ |
-| port         | string | Set Lidar the serial port or IP address <br/>it can be set to `/dev/ttyUSB0`, `192.168.1.11`, etc. <br/>default: `/dev/ydlidar` |
-| frame_id     | string | Lidar TF coordinate system name. <br/>default: `laser_frame` |
-| ignore_array | string | LiDAR filtering angle area<br/>eg: `-90, -80, 30, 40` |
-| baudrate     | int | Lidar baudrate or network port. <br/>default: `230400` |
-| lidar_type     | int | Set lidar type <br/>0 -- TYPE_TOF<br/>1 -- TYPE_TRIANGLE<br/>2 -- TYPE_TOF_NET <br/>default: `1` |
-| device_type     | int | Set device type <br/>0 -- YDLIDAR_TYPE_SERIAL<br/>1 -- YDLIDAR_TYPE_TCP<br/>2 -- YDLIDAR_TYPE_UDP <br/>default: `0` |
-| sample_rate     | int | Set Lidar Sample Rate. <br/>default: `9` |
-| abnormal_check_count     | int | Set the number of abnormal startup data attempts. <br/>default: `4` |
-| fixed_resolution     | bool | Fixed angluar resolution. <br/>default: `true` |
-| reversion     | bool | Reversion LiDAR. <br/>default: `true` |
-| inverted     | bool | Inverted LiDAR.<br/>false -- ClockWise.<br/>true -- CounterClockWise  <br/>default: `true` |
-| auto_reconnect     | bool | Automatically reconnect the LiDAR.<br/>true -- hot plug. <br/>default: `true` |
-| isSingleChannel     | bool | Whether LiDAR is a single-channel.<br/>default: `false` |
-| intensity     | bool | Whether LiDAR has intensity.<br/>true -- G2 LiDAR.<br/>default: `false` |
-| support_motor_dtr     | bool | Whether the Lidar can be started and stopped by Serial DTR.<br/>default: `false` |
-| angle_min     | float | Minimum Valid Angle.<br/>default: `-180` |
-| angle_max     | float | Maximum Valid Angle.<br/>default: `180` |
-| range_min     | float | Minimum Valid range.<br/>default: `0.1` |
-| range_max     | float | Maximum Valid range.<br/>default: `16.0` |
-| frequency     | float | Set Scanning Frequency.<br/>default: `10.0` |
-| invalid_range_is_inf     | bool | Invalid Range is inf.<br/>true -- inf.<br/>false -- 0.0.<br/>default: `false` |
-More paramters details, see [here](details.md)
-
-## Contact EAI
-![Development Path](images/EAI.png)
-
-If you have any extra questions, please feel free to [contact us](http://www.ydlidar.cn/cn/contact)
-
-
-
-
-
-
+* **Scan Drop / Old Timestamp in TF:**
+  This version automatically detects uninitialized timestamps (`scan.stamp == 0`) and populates `header.stamp` with `node->get_clock()->now()`, preventing TF and RViz dropping errors.
