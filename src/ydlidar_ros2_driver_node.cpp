@@ -1,4 +1,4 @@
-﻿/*
+/*
  *  YDLIDAR SYSTEM
  *  YDLIDAR ROS 2 Node
  *
